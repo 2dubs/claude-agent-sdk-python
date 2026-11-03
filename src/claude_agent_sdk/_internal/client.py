@@ -11,6 +11,7 @@ from ..types import (
     Message,
     _configure_can_use_tool,
     _hooks_to_internal_format,
+    _validate_max_turns,
 )
 from .message_parser import parse_message
 from .query import Query, run_end_ceiling_ms, stamp_user_message
@@ -78,6 +79,7 @@ class InternalClient:
         materialized: MaterializedResume | None,
     ) -> AsyncGenerator[Message, None]:
         # Validate and configure permission settings (matching TypeScript SDK logic)
+        _validate_max_turns(options)
         configured_options = _configure_can_use_tool(options)
 
         if materialized is not None:

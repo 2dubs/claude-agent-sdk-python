@@ -2315,6 +2315,24 @@ def _configure_can_use_tool(options: "ClaudeAgentOptions") -> "ClaudeAgentOption
     return replace(options, permission_prompt_tool_name="stdio")
 
 
+def _validate_max_turns(options: "ClaudeAgentOptions") -> None:
+    """Reject ``max_turns`` values the CLI cannot honor.
+
+    Shared by ``query()`` and ``ClaudeSDKClient.connect()``. ``0`` used to be
+    dropped from the command line, which silently removed the limit.
+
+    Raises:
+        ValueError: If ``max_turns`` is set and is not a positive integer.
+    """
+    max_turns = options.max_turns
+    if max_turns is None:
+        return
+    if not isinstance(max_turns, int) or max_turns < 1:
+        raise ValueError(
+            f"max_turns must be a positive integer or None, got {max_turns!r}"
+        )
+
+
 def _hooks_to_internal_format(
     hooks: "dict[HookEvent, list[HookMatcher]]",
 ) -> dict[str, list[dict[str, Any]]]:
@@ -2418,7 +2436,8 @@ class ClaudeAgentOptions:
     max_turns: int | None = None
     """Maximum number of conversation turns before the query stops.
 
-    A turn consists of a user message and assistant response.
+    A turn consists of a user message and assistant response. Must be a
+    positive integer; ``None`` (the default) applies no limit.
     """
 
     max_budget_usd: float | None = None

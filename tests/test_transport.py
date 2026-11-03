@@ -308,6 +308,13 @@ class TestSubprocessCLITransport:
         assert "--max-turns" in cmd
         assert "5" in cmd
 
+    def test_build_command_omits_max_turns_when_unset(self):
+        """No --max-turns flag is passed when max_turns is None."""
+        transport = SubprocessCLITransport(prompt="test", options=make_options())
+
+        cmd = transport._build_command()
+        assert "--max-turns" not in cmd
+
     def test_build_command_with_dont_ask_permission_mode(self):
         """Test building CLI command with dontAsk permission mode."""
         transport = SubprocessCLITransport(

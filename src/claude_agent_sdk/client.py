@@ -20,6 +20,7 @@ from .types import (
     ResultMessage,
     _configure_can_use_tool,
     _hooks_to_internal_format,
+    _validate_max_turns,
 )
 
 
@@ -151,6 +152,7 @@ class ClaudeSDKClient:
         from ._internal.transport.subprocess_cli import SubprocessCLITransport
 
         # Validate and configure permission settings (matching TypeScript SDK logic)
+        _validate_max_turns(self.options)
         options = _configure_can_use_tool(self.options)
 
         if self._materialized is not None:

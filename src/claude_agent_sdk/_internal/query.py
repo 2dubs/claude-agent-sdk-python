@@ -178,6 +178,7 @@ class Query:
         forward_subagent_text: bool = False,
         verbatim_prompts: bool = False,
         run_end_ceiling_ms: int = DEFAULT_RUN_END_CEILING_MS,
+        permission_timeout: float | None = None,
     ):
         """Initialize Query with transport and callbacks.
 
@@ -204,6 +205,8 @@ class Query:
                 with no new turn while the CLI still reports ``running``;
                 ``0`` waits for ``idle`` however long it takes (see
                 ``run_end_ceiling_ms()``)
+            permission_timeout: Seconds to wait for ``can_use_tool`` before
+                resolving the request automatically; ``None`` waits forever
         """
         self._initialize_timeout = initialize_timeout
         self.transport = transport
@@ -222,6 +225,7 @@ class Query:
         self._forward_subagent_text = forward_subagent_text
         self._verbatim_prompts = verbatim_prompts
         self._run_end_ceiling_ms = run_end_ceiling_ms
+        self._permission_timeout = permission_timeout
 
         # Control protocol state
         self.pending_control_responses: dict[str, anyio.Event] = {}
@@ -620,7 +624,7 @@ class Query:
                     raise Exception("canUseTool callback is not provided")
 
                 context = ToolPermissionContext(
-                    signal=None,  # TODO: Add abort signal support
+                    signal=None,
                     suggestions=[
                         PermissionUpdate.from_dict(s)
                         for s in (
@@ -636,21 +640,27 @@ class Query:
                     description=permission_request.get("description"),
                 )
 
-                response = await self.can_use_tool(
-                    permission_request["tool_name"],
-                    permission_request["input"],
-                    context,
-                )
+                tool_name = permission_request["tool_name"]
+                with anyio.move_on_after(self._permission_timeout) as scope:
+                    context.signal = scope
+                    response = await self.can_use_tool(
+                        tool_name,
+                        permission_request["input"],
+                        context,
+                    )
+                if scope.cancelled_caught:
+                    logger.debug(
+                        "can_use_tool did not respond within %ss for %s",
+                        self._permission_timeout,
+                        tool_name,
+                    )
+                    response = PermissionResultAllow()
 
                 # Convert PermissionResult to expected dict format
                 if isinstance(response, PermissionResultAllow):
                     response_data = {
                         "behavior": "allow",
-                        "updatedInput": (
-                            response.updated_input
-                            if response.updated_input is not None
-                            else original_input
-                        ),
+                        "updatedInput": response.updated_input or original_input,
                     }
                     if response.updated_permissions is not None:
                         response_data["updatedPermissions"] = [

@@ -3,6 +3,7 @@
 import json
 from typing import Any
 
+import anyio
 import pytest
 
 from claude_agent_sdk import (
@@ -386,6 +387,121 @@ class TestToolPermissionCallbacks:
         response = transport.written_messages[0]
         assert '"subtype": "error"' in response
         assert "Callback error" in response
+
+    @pytest.mark.anyio
+    async def test_permission_callback_timeout(self):
+        """A callback that never returns is resolved once the timeout elapses."""
+
+        async def slow_callback(
+            tool_name: str, input_data: dict, context: ToolPermissionContext
+        ) -> PermissionResultAllow:
+            await anyio.sleep(10)
+            return PermissionResultAllow()
+
+        transport = MockTransport()
+        query = Query(
+            transport=transport,
+            is_streaming_mode=True,
+            can_use_tool=slow_callback,
+            hooks=None,
+            permission_timeout=0.05,
+        )
+
+        request = {
+            "type": "control_request",
+            "request_id": "test-timeout",
+            "request": {
+                "subtype": "can_use_tool",
+                "tool_name": "TestTool",
+                "input": {"param": "value"},
+                "permission_suggestions": [],
+            },
+        }
+
+        with anyio.fail_after(2):
+            await query._handle_control_request(request)
+
+        assert len(transport.written_messages) == 1
+        response = json.loads(transport.written_messages[0])
+        assert response["response"]["subtype"] == "success"
+        assert response["response"]["response"]["behavior"] == "allow"
+        assert response["response"]["response"]["updatedInput"] == {"param": "value"}
+
+    @pytest.mark.anyio
+    async def test_permission_callback_receives_signal(self):
+        """The callback context exposes the request's cancellation scope."""
+        received_context: ToolPermissionContext | None = None
+
+        async def capture_callback(
+            tool_name: str, input_data: dict, context: ToolPermissionContext
+        ) -> PermissionResultAllow:
+            nonlocal received_context
+            received_context = context
+            return PermissionResultAllow()
+
+        transport = MockTransport()
+        query = Query(
+            transport=transport,
+            is_streaming_mode=True,
+            can_use_tool=capture_callback,
+            hooks=None,
+            permission_timeout=5,
+        )
+
+        request = {
+            "type": "control_request",
+            "request_id": "test-signal",
+            "request": {
+                "subtype": "can_use_tool",
+                "tool_name": "TestTool",
+                "input": {},
+                "permission_suggestions": [],
+            },
+        }
+
+        await query._handle_control_request(request)
+
+        assert received_context is not None
+        assert received_context.signal is not None
+        assert not received_context.signal.cancel_called
+
+    @pytest.mark.anyio
+    async def test_permission_callback_empty_updated_input(self):
+        """An empty updated_input falls back to the original tool input."""
+
+        async def empty_callback(
+            tool_name: str, input_data: dict, context: ToolPermissionContext
+        ) -> PermissionResultAllow:
+            return PermissionResultAllow(updated_input={})
+
+        transport = MockTransport()
+        query = Query(
+            transport=transport,
+            is_streaming_mode=True,
+            can_use_tool=empty_callback,
+            hooks=None,
+        )
+
+        request = {
+            "type": "control_request",
+            "request_id": "test-empty-input",
+            "request": {
+                "subtype": "can_use_tool",
+                "tool_name": "TestTool",
+                "input": {"param": "value"},
+                "permission_suggestions": [],
+            },
+        }
+
+        await query._handle_control_request(request)
+
+        response = transport.written_messages[0]
+        assert '"param": "value"' in response
+
+    def test_permission_timeout_default(self):
+        """ClaudeAgentOptions applies a default permission timeout."""
+        options = ClaudeAgentOptions()
+        assert options.permission_timeout == 60.0
 
 
 class TestHookCallbacks:

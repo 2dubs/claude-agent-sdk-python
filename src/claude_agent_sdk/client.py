@@ -221,6 +221,7 @@ class ClaudeSDKClient:
             forward_subagent_text=self.options.forward_subagent_text,
             verbatim_prompts=self._verbatim_prompts,
             run_end_ceiling_ms=run_end_ceiling_ms(self.options.env),
+            permission_timeout=self.options.permission_timeout,
         )
 
         if self.options.session_store is not None:

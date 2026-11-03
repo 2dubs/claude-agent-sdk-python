@@ -2541,6 +2541,20 @@ class ClaudeAgentOptions:
     hook returning an *allow* decision also skips this callback.
     """
 
+    permission_timeout: float | None = 60.0
+    """Seconds to wait for ``can_use_tool`` to return a decision.
+
+    If the callback has not returned within this window, the SDK resolves the
+    permission request itself so the agent loop is not left waiting forever
+    (for example when an external approval service is unreachable). This
+    mirrors the timeout Claude Code applies to its interactive permission
+    prompt. Set to ``None`` to wait indefinitely.
+
+    While the callback runs, ``ToolPermissionContext.signal`` exposes the
+    cancellation scope for the request so long-running callbacks can check
+    ``signal.cancel_called`` and stop early.
+    """
+
     hooks: dict[HookEvent, list[HookMatcher]] | None = None
     """Hook callbacks for responding to various events during execution.
 

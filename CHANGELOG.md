@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.178
+
+### New Features
+
+- **`permission_timeout` option**: `can_use_tool` callbacks that do not return within `permission_timeout` seconds (default 60) are resolved automatically so agents no longer hang on a stalled approval backend. `ToolPermissionContext.signal` now exposes the request's cancellation scope.
+
 ## 0.2.177
 
 ### New Features
